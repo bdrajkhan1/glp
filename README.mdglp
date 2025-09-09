@@ -1,0 +1,106 @@
+# glp
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+import sqlite3
+import os
+
+# ================= Database Setup =================
+DB_FILE = "users.db"
+if not os.path.exists(DB_FILE):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE users (
+        user_id INTEGER PRIMARY KEY,
+        balance INTEGER DEFAULT 100
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+# ================= Bot Token =================
+TOKEN = "YOUR_BOT_TOKEN_HERE"8447799444:AAHOBKhUGpQwit_FLIF89au8tylZPPYTu_s
+
+# ================= Balance Function =================
+def get_balance(user_id):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else 0
+
+# ================= Start Command =================
+def start(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, balance) VALUES (?, ?)", (user_id, 100))
+    conn.commit()
+    conn.close()
+
+    # Inline Buttons with Emoji + PNG image links (as URL buttons)
+    keyboard = [
+        [InlineKeyboardButton("🪙 Coins", callback_data='coins')],
+        [InlineKeyboardButton("💎 Gems", callback_data='gems')],
+        [InlineKeyboardButton("💰 Add Wallet +50", callback_data='wallet')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    balance = get_balance(user_id)
+    # MarkdownV2 formatted balance card
+    update.message.reply_text(
+        f"*💠 TapShop Bot*\n\n"
+        f"*Your Balance:* 💰 `{balance}`\n\n"
+        f"Select an option below:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+# ================= Button Handler =================
+selected_tab = {}
+
+def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.from_user.id
+    query.answer()
+
+    # Single Selection
+    prev = selected_tab.get(user_id)
+    selected_tab[user_id] = query.data
+
+    # Actions with Balance Card update
+    if query.data == 'coins':
+        balance = get_balance(user_id)
+        query.edit_message_text(
+            text=f"*🪙 Coins Selected!*\n\n*Your Balance:* 💰 `{balance}`",
+            parse_mode='Markdown'
+        )
+    elif query.data == 'gems':
+        balance = get_balance(user_id)
+        query.edit_message_text(
+            text=f"*💎 Gems Selected!*\n\n*Your Balance:* 💰 `{balance}`",
+            parse_mode='Markdown'
+        )
+    elif query.data == 'wallet':
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET balance = balance + 50 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        balance = get_balance(user_id)
+        query.edit_message_text(
+            text=f"*💰 Wallet Added!*\n\n*Your New Balance:* 💰 `{balance}`",
+            parse_mode='Markdown'
+        )
+
+# ================= Main =================
+def main():
+    updater = Updater(TOKEN)
+    updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CallbackQueryHandler(button))
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
